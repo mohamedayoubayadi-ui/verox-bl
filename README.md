@@ -140,10 +140,12 @@ The pipeline produces structured data such as:
 
 ```json
 {
-  "numero_bl": "BL123456",
-  "date": "2026-07-15",
-  "fournisseur": "Example Supplier",
-  "client": "Example Pharmacy",
+  "num_bl": "BL123456",
+  "date_bl": "15/07/2026",
+  "nom_fournisseur": "Example Supplier",
+  "mf_fournisseur": "1234567X/A/M/000",
+  "nom_client": "Example Pharmacy",
+  "mf_client": "1234567X/A/M/000",
   "produits": [
     {
       "code": "123456",
@@ -151,7 +153,10 @@ The pipeline produces structured data such as:
       "quantite": 5
     }
   ],
-  "total_ttc": 125.500
+  "total_ttc": 125.5,
+  "champs_manquants": [],
+  "est_complet": true,
+  "alertes": []
 }
 ```
 
