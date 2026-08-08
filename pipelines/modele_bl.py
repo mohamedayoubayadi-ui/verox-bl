@@ -8,6 +8,7 @@ Modele Pydantic du BL.
 - Validator croise : coherence entre champs (num_bl != code produit,
   mf_client != mf_fournisseur).
 - champs_manquants : liste des champs top-level encore a None.
+
 """
 import re
 from datetime import datetime
