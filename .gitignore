@@ -2,19 +2,30 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Environnement virtuel
 .venv/
 venv/
 
-# Environnement / secrets
+# Secrets
 .env
+.env.*
 
-# Kaggle / notebooks
+# Kaggle / Jupyter
 .ipynb_checkpoints/
 
-# Fichiers volumineux ou sensibles
+# Images / données locales
 *.jpeg
 *.jpg
 *.png
+
+# VS Code
+.vscode/
+
+# Logs / temporaires
+*.log
+*.tmp
+*.temp
 
 # OS
 .DS_Store
