@@ -276,5 +276,3 @@ primarily focus on the initial GLM-OCR inference stage.
 ## License
 
 This project is currently developed as an internship project.
-
-A license will be added before public redistribution.
