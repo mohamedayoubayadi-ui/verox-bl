@@ -265,8 +265,16 @@ only a small additional latency.
 These preliminary results indicate that further optimization should
 primarily focus on the initial GLM-OCR inference stage.
 
+---
+
+## References
+
+- [GLM-OCR](https://github.com/zai-org/GLM-OCR) — Multimodal OCR model used for document reading, text extraction, and targeted fallback extraction.
+- [Pydantic](https://docs.pydantic.dev/) — Used for validating and structuring the extracted delivery note data.
+- [OmniDocBench](https://github.com/opendatalab/OmniDocBench) — Benchmark for evaluating document parsing and OCR systems.
+
 ## License
 
-This project is currently developed as a research / internship project.
+This project is currently developed as an internship project.
 
 A license will be added before public redistribution.
