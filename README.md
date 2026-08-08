@@ -1,93 +1,272 @@
-# Verox BL — Delivery Note Extraction Pipeline
+# VEROX-BL — Delivery Note Extraction Pipeline
 
-Automated extraction of delivery note data (supplier, client, products,
-amounts) from photos, using a hybrid pipeline: a vision-language model
-(GLM-OCR, served via vLLM) reads the document, then regex-based parsing
-with Pydantic validation structures the output, with a targeted second
-VLM-OCR pass for any field that remains missing or invalid.
+> OCR and information-extraction pipeline for converting delivery note
+> images into validated structured data.
 
-> **Status**: proof of concept. The extraction pipeline and the GLM-OCR
-> integration are implemented and have been tested end-to-end on real
-> delivery notes (NVIDIA Tesla T4, Kaggle). The backend API and
-> database layer are not yet implemented (see Roadmap below).
+VEROX-BL is a Document AI pipeline designed to extract structured
+information from pharmaceutical delivery notes.
 
-## What's implemented
+The system combines **GLM-OCR** for document transcription with
+deterministic Python-based extraction and **Pydantic** validation.
+When a required field cannot be reliably recovered, a targeted
+VLM-OCR fallback is used.
 
-- **`pipelines/`** — core extraction and validation logic:
-  - `normalisation.py` — number/date normalization (Tunisian comma
-    decimal format)
-  - `extraction_entete.py` — delivery note number, date, tax ID
-    (supplier/client), total amount
-  - `extraction_produits.py` — product lines (code, quantity,
-    description)
-  - `extraction_noms.py` — supplier/client name detection
-  - `modele_bl.py` — Pydantic data model with format validation and
-    cross-field consistency checks (e.g. a delivery note number can't
-    look like a monetary amount or a tax ID)
-  - `orchestration.py` — orchestrates the full flow: regex extraction
-    first, then a targeted VLM-OCR fallback (one prompt per missing
-    field) for anything the regex pass couldn't extract or validate
+## Status
 
-  This part runs entirely on CPU and executes in milliseconds.
+**Proof of concept — extraction pipeline implemented and tested
+end-to-end on real delivery notes.**
 
-- **`services/pipeline_verox.py`** — vLLM server management and
-  GLM-OCR calls (raw OCR pass + targeted fallback pass), tested
-  end-to-end on an NVIDIA Tesla T4 (Kaggle)
+Current development and testing have been performed on an
+**NVIDIA Tesla T4 (Kaggle)**.
 
-## What's planned (not yet implemented)
+---
 
-- **`referances/`** — reference datasets (known suppliers, pharmacies,
-  medications) considered for cross-validation of extracted fields;
-  under evaluation, not yet wired into the pipeline
-- **`src/`** — backend API (FastAPI) to expose the pipeline over HTTP
-- **Database** (PostgreSQL / SQLite) — persistence of processed
-  delivery notes
+## Architecture
 
-## Pipeline
+VEROX-BL separates document reading, deterministic extraction, and
+validation. This makes the extraction process easier to control,
+debug, and optimize.
 
-1. Raw OCR reading of the image via GLM-OCR — **implemented**
-   (`services/pipeline_verox.py`, GPU required, tested on Tesla T4)
-2. Structured extraction using regex rules — **implemented** (CPU only)
-3. Consistency validation (Pydantic) — **implemented**
-4. Targeted VLM-OCR fallback for missing fields — **implemented**
-   (GPU required)
-5. Anti-hallucination guardrails — **implemented**
-6. Results exposed via API and persisted to a database — **planned**
-
-## Hardware requirements
-
-The vision-language model (GLM-OCR) is served through vLLM and requires
-a GPU to run at usable speed. Tested on an NVIDIA Tesla T4 (Kaggle).
-
-Note on startup time: vLLM needs to load the model into GPU memory and
-compile CUDA kernels on first launch (a few minutes). Once running,
-each document is processed in a few seconds. For production, the
-server should stay warm on a dedicated GPU instance (e.g. RunPod)
-rather than being restarted per request.
-
-## Tech stack
-
-| Component | Status |
-|---|---|
-| GLM-OCR (vision-language model) | in use |
-| vLLM (inference server) | in use |
-| Python regex (extraction) | implemented |
-| Pydantic (validation) | implemented |
-| FastAPI (backend API) | planned |
-| PostgreSQL / SQLite (persistence) | planned |
-
-## Getting started
-
-Install the dependencies:
-```bash
-!pip uninstall -y transformers -q
-!pip install git+https://github.com/huggingface/transformers.git -q
-!pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly -q
-!pip install -q pydantic rapidfuzz openai
+```text
+                         ┌─────────────────────┐
+                         │   Delivery Note     │
+                         │        Image        │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │      GLM-OCR        │
+                         │   Vision-Language   │
+                         │       Model         │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │     Raw OCR Text    │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                  ┌────────────────────────────────┐
+                  │    Deterministic Extraction    │
+                  │                                │
+                  │  • Header                      │
+                  │  • Supplier / Client           │
+                  │  • Products                    │
+                  │  • Amounts                     │
+                  └───────────────┬────────────────┘
+                                  │
+                                  ▼
+                         ┌─────────────────────┐
+                         │     Normalization   │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌─────────────────────┐
+                         │      Pydantic       │
+                         │      Validation     │
+                         └──────────┬──────────┘
+                                    │
+                           ┌────────┴────────┐
+                           │                 │
+                         Valid          Missing /
+                           │             Invalid
+                           │                 │
+                           │                 ▼
+                           │        ┌─────────────────┐
+                           │        │ Targeted        │
+                           │        │ GLM-OCR         │
+                           │        │ Fallback        │
+                           │        └────────┬────────┘
+                           │                 │
+                           └────────┬────────┘
+                                    ▼
+                         ┌─────────────────────┐
+                         │  Validated JSON     │
+                         └─────────────────────┘
 ```
 
-Run the full pipeline end-to-end by connecting your own GLM-OCR
-server (served via vLLM). See `services/pipeline_verox.py` for the
-server startup and integration code — point it to your vLLM endpoint
-(local GPU or a hosted instance such as RunPod) and process a delivery
-note image directly.
+---
+
+## What's Implemented
+
+### Document processing
+
+- GLM-OCR document transcription
+- vLLM-based inference
+- Header information extraction
+- Supplier / client name extraction
+- Product line extraction
+- Amount and total extraction
+
+### Data processing
+
+- Number and date normalization
+- Pydantic data modelling
+- Field-level validation
+- Cross-field consistency checks
+- Targeted VLM-OCR fallback
+- End-to-end pipeline orchestration
+
+The CPU-side extraction and validation logic is separated from the
+GPU-dependent VLM inference layer.
+
+---
+
+## Repository Structure
+
+```text
+verox-bl/
+│
+├── pipelines/
+│   ├── __init__.py
+│   ├── extraction_entete.py
+│   ├── extraction_noms.py
+│   ├── extraction_produits.py
+│   ├── modele_bl.py
+│   ├── normalisation.py
+│   └── orchestration.py
+│
+├── services/
+│   └── pipeline_verox.py
+│
+├── requirements.txt
+├── .gitignore
+└── README.md
+```
+
+## Example Output
+
+The pipeline produces structured data such as:
+
+```json
+{
+  "numero_bl": "BL123456",
+  "date": "2026-07-15",
+  "fournisseur": "Example Supplier",
+  "client": "Example Pharmacy",
+  "produits": [
+    {
+      "code": "123456",
+      "designation": "Example Product",
+      "quantite": 5
+    }
+  ],
+  "total_ttc": 125.500
+}
+```
+
+> The example is illustrative and does not contain real supplier,
+> pharmacy, or customer data.
+
+---
+
+## Performance
+
+The main performance bottleneck is the GLM-OCR inference stage.
+
+Current experiments have been conducted on an NVIDIA Tesla T4.
+Inference latency depends on document complexity, generation length,
+and inference configuration.
+
+The CPU-side extraction and validation stages execute in milliseconds
+compared with the VLM inference stage.
+
+Current optimization work focuses on:
+
+- Reducing unnecessary VLM calls
+- Using targeted fallback instead of full-document reprocessing
+- Optimizing generation length
+- Optimizing vLLM configuration
+- Benchmarking different GPU environments
+
+Formal performance results will be reported after evaluation on a
+representative dataset.
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/mohamedayoubayadi-ui/verox-bl.git
+cd verox-bl
+pip install -r requirements.txt
+```
+
+GLM-OCR inference requires a compatible NVIDIA GPU and a running
+vLLM server.
+
+The integration is implemented in:
+
+```text
+services/pipeline_verox.py
+```
+
+---
+
+## Usage
+
+The main pipeline is orchestrated through:
+
+```text
+pipelines/orchestration.py
+```
+
+The GLM-OCR / vLLM integration is handled by:
+
+```text
+services/pipeline_verox.py
+```
+
+The pipeline takes a delivery note image and produces structured,
+validated data.
+
+---
+
+## Results & Next Steps
+
+The pipeline has been implemented and tested end-to-end on real
+delivery notes using an NVIDIA Tesla T4.
+
+Current work focuses on improving extraction reliability and reducing
+VLM inference latency.
+
+Planned improvements include:
+
+- Evaluation on a representative dataset
+- Field-level accuracy and latency benchmarks
+- Reference-data validation
+- FastAPI integration
+- Database persistence
+- Production deployment and monitoring
+
+---
+
+## Experiments
+
+The pipeline was evaluated on a set of real delivery notes provided
+during the internship.
+
+Due to the confidential nature of the documents, the original
+documents and extracted data are not included in this repository.
+
+Experiments were conducted on an NVIDIA Tesla T4 GPU using Kaggle,
+with a focus on extraction quality and inference latency.
+
+| Experiment | Initial OCR | Targeted Fallback | Total |
+|----------|------------:|------------------:|------:|
+| BL 1     | 13.63 s     | 0.70 s            | 14.33 s |
+| BL 2     | 10.47 s     | 0.45 s            | 10.92 s |
+| BL 3     | 9.27 s      | 0.46 s            | 9.73 s |
+
+The initial OCR pass is currently the main contributor to the overall
+inference time. In comparison, the targeted fallback passes introduce
+only a small additional latency.
+
+These preliminary results indicate that further optimization should
+primarily focus on the initial GLM-OCR inference stage.
+
+## License
+
+This project is currently developed as a research / internship project.
+
+A license will be added before public redistribution.
